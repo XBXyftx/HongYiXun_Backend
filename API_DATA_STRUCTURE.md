@@ -1,0 +1,984 @@
+# API 数据结构文档
+
+本文档详细说明 NowInOpenHarmony Server 所有 API 接口的请求参数和响应数据结构，帮助团队成员理解和使用现有 API，以及开发新的数据源时保持一致性。
+
+---
+
+## 目录
+
+- [新闻 API (News)](#新闻-api-news)
+  - [数据模型](#新闻数据模型)
+  - [接口列表](#新闻接口列表)
+- [轮播图 API (Banner)](#轮播图-api-banner)
+  - [数据模型](#轮播图数据模型)
+  - [接口列表](#轮播图接口列表)
+- [通用规范](#通用规范)
+- [开发新数据源指南](#开发新数据源指南)
+
+---
+
+## 新闻 API (News)
+
+### 新闻数据模型
+
+#### 1. NewsContentBlock - 新闻内容块
+
+新闻正文内容采用 **结构化块** 的方式组织，支持多种内容类型。
+
+```python
+class ContentType(str, Enum):
+    TEXT = "text"      # 文本段落
+    IMAGE = "image"    # 图片
+    VIDEO = "video"    # 视频
+    CODE = "code"      # 代码块
+
+class NewsContentBlock(BaseModel):
+    type: ContentType  # 内容类型
+    value: str         # 内容值
+```
+
+**示例**:
+```json
+{
+  "type": "text",
+  "value": "OpenHarmony 5.0 正式发布..."
+}
+```
+
+```json
+{
+  "type": "image",
+  "value": "https://www.openharmony.cn/images/banner.jpg"
+}
+```
+
+```json
+{
+  "type": "code",
+  "value": "import { hilog } from '@kit.PerformanceAnalysisKit';"
+}
+```
+
+#### 2. NewsArticle - 新闻文章模型
+
+**核心字段说明**:
+
+| 字段名 | 类型 | 必填 | 说明 | 示例 |
+|--------|------|------|------|------|
+| `id` | string | 否 | 文章唯一标识 | "openharmony_20240115_001" |
+| `title` | string | 是 | 文章标题 | "OpenHarmony 5.0 正式发布" |
+| `date` | string | 是 | 发布日期 (YYYY-MM-DD 格式) | "2024-01-15" |
+| `url` | string | 是 | 文章原文链接 | "https://www.openharmony.cn/news/123" |
+| `content` | array | 是 | 文章内容块数组 | 见下方示例 |
+| `category` | string | 否 | 文章分类 | "官方动态" / "技术博客" |
+| `summary` | string | 否 | 文章摘要/简介 | "本次发布包含..." |
+| `source` | string | 否 | 数据源标识 | "OpenHarmony" / "OpenHarmony技术博客" |
+| `created_at` | datetime | 否 | 记录创建时间 | "2024-01-15T10:30:00" |
+| `updated_at` | datetime | 否 | 记录更新时间 | "2024-01-15T14:20:00" |
+
+**完整示例**:
+```json
+{
+  "id": "openharmony_20240115_001",
+  "title": "OpenHarmony 5.0 正式发布",
+  "date": "2024-01-15",
+  "url": "https://www.openharmony.cn/news/123",
+  "content": [
+    {
+      "type": "text",
+      "value": "OpenHarmony 5.0 版本正式发布，带来了全新的特性..."
+    },
+    {
+      "type": "image",
+      "value": "https://www.openharmony.cn/images/5.0-banner.jpg"
+    },
+    {
+      "type": "text",
+      "value": "主要更新包括..."
+    }
+  ],
+  "category": "官方动态",
+  "summary": "OpenHarmony 5.0 带来了性能优化、新API等重要更新",
+  "source": "OpenHarmony",
+  "created_at": "2024-01-15T10:30:00",
+  "updated_at": "2024-01-15T10:30:00"
+}
+```
+
+#### 3. NewsResponse - 新闻列表响应模型
+
+用于分页返回新闻列表的标准响应格式。
+
+| 字段名 | 类型 | 说明 | 示例 |
+|--------|------|------|------|
+| `articles` | array | 新闻文章数组 | 见 NewsArticle |
+| `total` | int | 总记录数 | 156 |
+| `page` | int | 当前页码（从1开始） | 1 |
+| `page_size` | int | 每页数量 | 20 |
+| `has_next` | bool | 是否有下一页 | true |
+| `has_prev` | bool | 是否有上一页 | false |
+
+**完整示例**:
+```json
+{
+  "articles": [
+    {
+      "id": "openharmony_20240115_001",
+      "title": "OpenHarmony 5.0 正式发布",
+      "date": "2024-01-15",
+      "url": "https://www.openharmony.cn/news/123",
+      "content": [...],
+      "category": "官方动态",
+      "summary": "OpenHarmony 5.0 带来了性能优化...",
+      "source": "OpenHarmony"
+    }
+  ],
+  "total": 156,
+  "page": 1,
+  "page_size": 20,
+  "has_next": true,
+  "has_prev": false
+}
+```
+
+#### 4. 其他新闻模型
+
+**SearchRequest - 搜索请求模型**:
+```python
+{
+  "keyword": str,        # 搜索关键词
+  "category": str,       # 可选：分类过滤
+  "start_date": str,     # 可选：开始日期 YYYY-MM-DD
+  "end_date": str        # 可选：结束日期 YYYY-MM-DD
+}
+```
+
+**TopicArticle - 论坛话题模型**:
+```python
+{
+  "id": str,
+  "title": str,
+  "content": str,
+  "author": str,
+  "reply_count": int,
+  "view_count": int,
+  "tags": List[str],
+  "created_at": datetime,
+  "url": str
+}
+```
+
+**ReleaseInfo - 版本发布信息模型**:
+```python
+{
+  "id": str,
+  "version": str,              # 版本号 "5.0.0"
+  "title": str,
+  "release_date": str,
+  "description": str,
+  "features": List[str],       # 新功能列表
+  "bug_fixes": List[str],      # 修复列表
+  "compatibility": str,        # 兼容性说明
+  "download_url": str,
+  "created_at": datetime
+}
+```
+
+---
+
+### 新闻接口列表
+
+#### 1. GET `/api/news/` - 获取新闻列表（聚合所有来源）
+
+**功能**: 获取所有来源的新闻，支持分页、分类过滤、搜索
+
+**请求参数**:
+
+| 参数名 | 类型 | 必填 | 默认值 | 说明 |
+|--------|------|------|--------|------|
+| `page` | int | 否 | 1 | 页码（≥1） |
+| `page_size` | int | 否 | 20 | 每页数量（1-100） |
+| `category` | string | 否 | null | 分类过滤（如 "官方动态"） |
+| `search` | string | 否 | null | 搜索关键词（标题/摘要） |
+| `all` | bool | 否 | false | 是否返回全部数据不分页 |
+
+**响应**: `NewsResponse` 对象
+
+**示例请求**:
+```bash
+# 获取第1页，每页20条
+curl "http://localhost:8001/api/news/?page=1&page_size=20"
+
+# 搜索包含"鸿蒙"的新闻
+curl "http://localhost:8001/api/news/?search=鸿蒙"
+
+# 获取"官方动态"分类的所有新闻
+curl "http://localhost:8001/api/news/?category=官方动态&all=true"
+```
+
+**示例响应**:
+```json
+{
+  "articles": [
+    {
+      "id": "openharmony_20240115_001",
+      "title": "OpenHarmony 5.0 正式发布",
+      "date": "2024-01-15",
+      "url": "https://www.openharmony.cn/news/123",
+      "content": [
+        {"type": "text", "value": "OpenHarmony 5.0 版本正式发布..."}
+      ],
+      "category": "官方动态",
+      "summary": "本次发布包含性能优化...",
+      "source": "OpenHarmony",
+      "created_at": "2024-01-15T10:30:00"
+    }
+  ],
+  "total": 156,
+  "page": 1,
+  "page_size": 20,
+  "has_next": true,
+  "has_prev": false
+}
+```
+
+---
+
+#### 2. GET `/api/news/openharmony` - 获取官网新闻
+
+**功能**: 仅返回 OpenHarmony 官网来源的新闻
+
+**请求参数**:
+
+| 参数名 | 类型 | 必填 | 默认值 | 说明 |
+|--------|------|------|--------|------|
+| `page` | int | 否 | 1 | 页码 |
+| `page_size` | int | 否 | 20 | 每页数量 |
+| `search` | string | 否 | null | 搜索关键词 |
+
+**响应**: `NewsResponse` 对象（只包含 `source="OpenHarmony"` 的文章）
+
+**示例请求**:
+```bash
+curl "http://localhost:8001/api/news/openharmony?page=1&page_size=10"
+```
+
+---
+
+#### 3. GET `/api/news/blog` - 获取技术博客
+
+**功能**: 仅返回 OpenHarmony 技术博客来源的文章
+
+**请求参数**: 同 `/api/news/openharmony`
+
+**响应**: `NewsResponse` 对象（只包含 `source="OpenHarmony技术博客"` 的文章）
+
+**示例请求**:
+```bash
+curl "http://localhost:8001/api/news/blog?search=ArkTS"
+```
+
+---
+
+#### 4. GET `/api/news/{article_id}` - 获取单篇新闻详情
+
+**功能**: 根据文章ID获取完整新闻内容
+
+**路径参数**:
+
+| 参数名 | 类型 | 必填 | 说明 |
+|--------|------|------|------|
+| `article_id` | string | 是 | 文章唯一标识 |
+
+**响应**: `NewsArticle` 对象
+
+**示例请求**:
+```bash
+curl "http://localhost:8001/api/news/openharmony_20240115_001"
+```
+
+**示例响应**:
+```json
+{
+  "id": "openharmony_20240115_001",
+  "title": "OpenHarmony 5.0 正式发布",
+  "date": "2024-01-15",
+  "url": "https://www.openharmony.cn/news/123",
+  "content": [
+    {"type": "text", "value": "OpenHarmony 5.0 版本正式发布..."}
+  ],
+  "category": "官方动态",
+  "source": "OpenHarmony"
+}
+```
+
+**错误响应**:
+```json
+{
+  "detail": "文章不存在"
+}
+```
+HTTP 状态码: 404
+
+---
+
+#### 5. POST `/api/news/crawl` - 手动触发新闻爬取
+
+**功能**: 手动触发指定来源的新闻爬取任务（后台执行）
+
+**请求参数**:
+
+| 参数名 | 类型 | 必填 | 默认值 | 说明 |
+|--------|------|------|--------|------|
+| `source` | enum | 否 | ALL | 新闻来源（ALL/OPENHARMONY/BLOG） |
+| `limit` | int | 否 | 10 | 返回数量限制（1-100） |
+
+**NewsSource 枚举值**:
+- `ALL`: 所有来源
+- `OPENHARMONY`: 仅官网新闻
+- `BLOG`: 仅技术博客
+
+**响应**:
+```json
+{
+  "message": "爬取任务已启动 - 来源: all",
+  "source": "all",
+  "timestamp": "2024-01-15T10:30:00",
+  "note": "爬取任务在后台执行，请稍后查看缓存更新状态"
+}
+```
+
+**示例请求**:
+```bash
+# 爬取所有来源
+curl -X POST "http://localhost:8001/api/news/crawl?source=ALL"
+
+# 仅爬取官网新闻
+curl -X POST "http://localhost:8001/api/news/crawl?source=OPENHARMONY"
+```
+
+---
+
+#### 6. GET `/api/news/status/info` - 获取服务状态
+
+**功能**: 获取新闻服务的运行状态和缓存信息
+
+**响应**:
+```json
+{
+  "service_status": {
+    "status": "ready",
+    "last_update": "2024-01-15T10:30:00",
+    "cache_count": 156,
+    "error_message": null
+  },
+  "news_sources": [
+    {
+      "name": "OpenHarmony官网",
+      "identifier": "OpenHarmony",
+      "article_count": 89
+    },
+    {
+      "name": "OpenHarmony技术博客",
+      "identifier": "OpenHarmony技术博客",
+      "article_count": 67
+    }
+  ],
+  "timestamp": "2024-01-15T10:35:00",
+  "endpoints": {
+    "all_news": "/api/news/",
+    "openharmony_news": "/api/news/openharmony",
+    "openharmony_blog": "/api/news/blog",
+    "news_detail": "/api/news/{article_id}",
+    "manual_crawl": "/api/news/crawl",
+    "service_status": "/api/news/status/info",
+    "cache_refresh": "/api/news/cache/refresh"
+  }
+}
+```
+
+**服务状态说明**:
+- `ready`: 服务就绪，缓存数据可用
+- `preparing`: 服务准备中，首次加载或更新中
+- `error`: 服务错误，需要检查日志
+
+---
+
+#### 7. POST `/api/news/cache/refresh` - 手动刷新缓存
+
+**功能**: 强制刷新新闻缓存
+
+**响应**:
+```json
+{
+  "message": "缓存刷新成功",
+  "timestamp": "2024-01-15T10:30:00"
+}
+```
+
+---
+
+## 轮播图 API (Banner)
+
+### 轮播图数据模型
+
+#### 1. BannerImage - 轮播图图片模型
+
+```python
+class BannerImage(BaseModel):
+    url: str           # 图片URL路径（必填）
+    alt: str           # 图片描述（可选）
+```
+
+**示例**:
+```json
+{
+  "url": "https://www.openharmony.cn/mainImg/banner1.png",
+  "alt": "OpenHarmony 5.0 发布"
+}
+```
+
+#### 2. BannerResponse - 轮播图响应模型
+
+**标准响应格式**:
+
+| 字段名 | 类型 | 说明 | 示例 |
+|--------|------|------|------|
+| `success` | bool | 请求是否成功 | true |
+| `images` | array | 图片URL字符串数组 | ["url1", "url2"] |
+| `total` | int | 图片总数 | 5 |
+| `message` | string | 响应消息 | "获取手机版Banner图片成功" |
+| `timestamp` | string | 响应时间戳（ISO格式） | "2024-01-15T10:30:00" |
+
+**完整示例**:
+```json
+{
+  "success": true,
+  "images": [
+    "https://www.openharmony.cn/mainImg/banner1.png",
+    "https://www.openharmony.cn/mainImg/banner2.png",
+    "https://www.openharmony.cn/mainImg/banner3.png"
+  ],
+  "total": 3,
+  "message": "获取手机版Banner图片成功（缓存），共 3 张",
+  "timestamp": "2024-01-15T10:30:00.123456"
+}
+```
+
+---
+
+### 轮播图接口列表
+
+#### 1. GET `/api/banner/mobile` - 获取移动端轮播图
+
+**功能**: 获取 OpenHarmony 官网手机版 Banner 图片 URL 列表
+
+**请求参数**:
+
+| 参数名 | 类型 | 必填 | 默认值 | 说明 |
+|--------|------|------|--------|------|
+| `force_crawl` | bool | 否 | false | 是否强制重新爬取（否则返回缓存） |
+
+**响应**: `BannerResponse` 对象
+
+**爬虫策略**:
+1. 默认返回缓存数据（快速响应）
+2. `force_crawl=true` 时强制重新爬取
+3. 自动回退机制：增强版爬虫失败时自动切换到传统爬虫
+
+**示例请求**:
+```bash
+# 获取缓存的轮播图
+curl "http://localhost:8001/api/banner/mobile"
+
+# 强制重新爬取
+curl "http://localhost:8001/api/banner/mobile?force_crawl=true"
+```
+
+**示例响应（成功）**:
+```json
+{
+  "success": true,
+  "images": [
+    "https://www.openharmony.cn/mainImg/banner1.png",
+    "https://www.openharmony.cn/mainImg/banner2.png"
+  ],
+  "total": 2,
+  "message": "获取手机版Banner图片成功（缓存），共 2 张",
+  "timestamp": "2024-01-15T10:30:00"
+}
+```
+
+**示例响应（准备中）**:
+```json
+{
+  "success": false,
+  "images": [],
+  "total": 0,
+  "message": "轮播图服务正在准备中，请稍后再试或使用force_crawl=true强制爬取",
+  "timestamp": "2024-01-15T10:30:00"
+}
+```
+
+---
+
+#### 2. GET `/api/banner/mobile/enhanced` - 使用增强版爬虫获取轮播图
+
+**功能**: 使用 Selenium 增强版爬虫获取轮播图（更稳定但速度较慢）
+
+**请求参数**:
+
+| 参数名 | 类型 | 必填 | 默认值 | 说明 |
+|--------|------|------|--------|------|
+| `force_crawl` | bool | 否 | false | 是否强制重新爬取 |
+| `download_images` | bool | 否 | false | 是否下载图片到本地 |
+
+**响应**: `BannerResponse` 对象
+
+**特点**:
+- 使用 Selenium WebDriver 模拟真实浏览器
+- 可处理 JavaScript 动态加载的内容
+- 支持下载图片到服务器本地
+
+**示例请求**:
+```bash
+# 使用增强版爬虫获取轮播图
+curl "http://localhost:8001/api/banner/mobile/enhanced"
+
+# 获取并下载图片到本地
+curl "http://localhost:8001/api/banner/mobile/enhanced?download_images=true"
+```
+
+---
+
+#### 3. GET `/api/banner/status` - 获取轮播图服务状态
+
+**功能**: 获取轮播图服务的详细状态信息
+
+**响应**:
+```json
+{
+  "service": "banner",
+  "cache_status": {
+    "status": "ready",
+    "last_update": "2024-01-15T10:30:00",
+    "cache_count": 5,
+    "update_count": 12
+  },
+  "scheduler_jobs": [
+    {
+      "id": "banner_crawl_job",
+      "name": "轮播图定时爬取",
+      "next_run": "2024-01-15T11:00:00"
+    }
+  ],
+  "api_endpoints": {
+    "mobile_banners": "/api/banner/mobile",
+    "enhanced_banners": "/api/banner/mobile/enhanced",
+    "status": "/api/banner/status",
+    "manual_crawl": "/api/banner/crawl",
+    "clear_cache": "/api/banner/cache/clear",
+    "cache_info": "/api/banner/cache"
+  },
+  "status_explanation": {
+    "preparing": "轮播图服务正在准备中，首次爬取尚未完成或当前正在更新",
+    "ready": "轮播图服务就绪，可以正常获取轮播图数据",
+    "error": "轮播图服务出现错误，需要检查日志或手动重新爬取"
+  },
+  "timestamp": "2024-01-15T10:35:00"
+}
+```
+
+---
+
+#### 4. POST `/api/banner/crawl` - 手动触发轮播图爬取
+
+**功能**: 手动触发轮播图爬取任务并立即返回结果
+
+**请求参数**:
+
+| 参数名 | 类型 | 必填 | 默认值 | 说明 |
+|--------|------|------|--------|------|
+| `use_enhanced` | bool | 否 | true | 是否使用增强版爬虫 |
+| `download_images` | bool | 否 | false | 是否下载图片到本地 |
+
+**响应**:
+```json
+{
+  "success": true,
+  "message": "手动爬取完成，共获取 5 张图片",
+  "images": [
+    "https://www.openharmony.cn/mainImg/banner1.png",
+    "https://www.openharmony.cn/mainImg/banner2.png"
+  ],
+  "total": 2,
+  "used_enhanced": true,
+  "downloaded": false,
+  "timestamp": "2024-01-15T10:30:00"
+}
+```
+
+**示例请求**:
+```bash
+# 使用增强版爬虫手动爬取
+curl -X POST "http://localhost:8001/api/banner/crawl?use_enhanced=true"
+
+# 使用传统爬虫
+curl -X POST "http://localhost:8001/api/banner/crawl?use_enhanced=false"
+```
+
+---
+
+#### 5. DELETE `/api/banner/cache/clear` - 清空轮播图缓存
+
+**功能**: 清空轮播图缓存数据
+
+**响应**:
+```json
+{
+  "success": true,
+  "message": "轮播图缓存已清空，原有 5 张图片",
+  "cleared_count": 5,
+  "timestamp": "2024-01-15T10:30:00"
+}
+```
+
+**示例请求**:
+```bash
+curl -X DELETE "http://localhost:8001/api/banner/cache/clear"
+```
+
+---
+
+#### 6. GET `/api/banner/cache` - 获取轮播图缓存详细信息
+
+**功能**: 查看缓存中的所有轮播图详细信息
+
+**响应**:
+```json
+{
+  "cache_status": {
+    "status": "ready",
+    "last_update": "2024-01-15T10:30:00",
+    "cache_count": 5
+  },
+  "cached_images": [
+    {
+      "url": "https://www.openharmony.cn/mainImg/banner1.png",
+      "alt": "OpenHarmony 5.0",
+      "filename": "banner1.png",
+      "extracted_at": "2024-01-15T10:30:00",
+      "source": "enhanced_crawler"
+    }
+  ],
+  "summary": {
+    "total_images": 5,
+    "last_update": "2024-01-15T10:30:00",
+    "update_count": 12
+  },
+  "timestamp": "2024-01-15T10:35:00"
+}
+```
+
+---
+
+## 通用规范
+
+### 1. HTTP 状态码
+
+| 状态码 | 说明 | 使用场景 |
+|--------|------|----------|
+| 200 | 成功 | 请求成功，数据正常返回 |
+| 404 | 未找到 | 资源不存在（如文章ID不存在） |
+| 500 | 服务器错误 | 服务器内部错误 |
+| 503 | 服务不可用 | 服务暂时不可用（如缓存错误） |
+
+### 2. 日期时间格式
+
+**日期字段** (`date`):
+- 格式: `YYYY-MM-DD`
+- 示例: `"2024-01-15"`
+
+**时间戳字段** (`created_at`, `updated_at`, `timestamp`):
+- 格式: ISO 8601 格式
+- 示例: `"2024-01-15T10:30:00"` 或 `"2024-01-15T10:30:00.123456"`
+
+### 3. 分页规范
+
+**请求参数**:
+- `page`: 页码，从 **1** 开始（不是0）
+- `page_size`: 每页数量，范围 1-100
+
+**响应字段**:
+- `total`: 总记录数
+- `page`: 当前页码
+- `page_size`: 每页数量
+- `has_next`: 是否有下一页
+- `has_prev`: 是否有上一页
+
+**计算公式**:
+```python
+has_next = (page * page_size) < total
+has_prev = page > 1
+```
+
+### 4. 搜索和过滤
+
+**搜索逻辑**:
+- 默认搜索 `title` 和 `summary` 字段
+- 使用 SQL `LIKE` 模糊匹配
+- 不区分大小写
+
+**过滤逻辑**:
+- `category`: 精确匹配
+- `source`: 精确匹配
+- 日期范围: 使用 `>=` 和 `<=` 比较
+
+### 5. 缓存状态
+
+所有缓存服务支持三种状态:
+
+| 状态 | 值 | 说明 |
+|------|------|------|
+| 准备中 | `preparing` | 首次加载或正在更新 |
+| 就绪 | `ready` | 缓存可用 |
+| 错误 | `error` | 服务错误 |
+
+### 6. 错误响应格式
+
+**标准错误响应**:
+```json
+{
+  "detail": "错误描述信息"
+}
+```
+
+**示例**:
+```json
+{
+  "detail": "文章不存在"
+}
+```
+
+---
+
+## 开发新数据源指南
+
+### 1. 数据模型兼容性检查
+
+在开发新数据源之前，先评估数据结构:
+
+**✅ 可以直接使用 NewsArticle 模型的场景**:
+- 新闻/文章类数据
+- 包含标题、日期、URL、内容
+- 内容可以拆分为文本/图片/代码块
+
+**⚠️ 需要扩展模型的场景**:
+- 需要额外字段（如作者、阅读量、标签）
+- 参考 `templates/model_template.py` 的 Option 2
+
+**❌ 需要完全自定义模型的场景**:
+- 数据结构与新闻完全不同
+- 参考 `templates/model_template.py` 的 Option 3
+
+### 2. 保持 API 响应一致性
+
+**分页接口必须包含**:
+```python
+{
+  "total": int,
+  "page": int,
+  "page_size": int,
+  "items": List[...],  # 或 "articles"
+  "has_next": bool,     # 可选
+  "has_prev": bool      # 可选
+}
+```
+
+**状态接口必须包含**:
+```python
+{
+  "service_status": {
+    "status": "ready" | "preparing" | "error",
+    "last_update": str,
+    "cache_count": int
+  }
+}
+```
+
+### 3. 新增字段的最佳实践
+
+**在 NewsArticle 模型基础上新增字段**:
+
+```python
+# models/yourdatasource.py
+from models.news import NewsArticle
+
+class YourDataSourceArticle(NewsArticle):
+    author: Optional[str] = None
+    view_count: Optional[int] = None
+    tags: Optional[List[str]] = None
+```
+
+**API 响应保持兼容**:
+
+```python
+# api/yourdatasource.py
+@router.get("/news", response_model=NewsListResponse)
+async def get_news():
+    # ...
+    return NewsListResponse(
+        total=total,
+        page=page,
+        page_size=page_size,
+        items=articles  # 即使有额外字段，也兼容基础模型
+    )
+```
+
+### 4. 数据源标识规范
+
+**source 字段命名建议**:
+- 使用清晰的中文或英文标识
+- 避免特殊字符
+- 保持唯一性
+
+**示例**:
+```python
+source = "HuaweiDev"           # ✅ 简洁清晰
+source = "华为开发者社区"        # ✅ 中文标识
+source = "huawei-dev-community" # ✅ 短横线分隔
+source = "huawei_dev"          # ✅ 下划线分隔
+
+source = "huawei!dev"          # ❌ 避免特殊字符
+source = "OpenHarmony"         # ❌ 已被使用
+```
+
+### 5. 内容结构化建议
+
+**如果新数据源的文章内容包含多种类型**，建议使用 `NewsContentBlock` 结构:
+
+```python
+content = [
+    {"type": "text", "value": "文章第一段..."},
+    {"type": "image", "value": "https://example.com/image.jpg"},
+    {"type": "code", "value": "const foo = 'bar';"},
+    {"type": "text", "value": "文章第二段..."}
+]
+```
+
+**如果内容比较简单**（纯文本），可以使用单个文本块:
+
+```python
+content = [
+    {"type": "text", "value": "整篇文章的内容..."}
+]
+```
+
+### 6. 测试新数据源
+
+**开发完成后，测试以下场景**:
+
+1. **基础功能**:
+```bash
+# 获取列表
+curl "http://localhost:8001/api/yourdatasource/news?page=1&page_size=10"
+
+# 搜索
+curl "http://localhost:8001/api/yourdatasource/news?search=关键词"
+
+# 获取详情
+curl "http://localhost:8001/api/yourdatasource/news/123"
+```
+
+2. **边界情况**:
+```bash
+# 空结果
+curl "http://localhost:8001/api/yourdatasource/news?search=不存在的关键词"
+
+# 分页边界
+curl "http://localhost:8001/api/yourdatasource/news?page=999999"
+
+# 无效ID
+curl "http://localhost:8001/api/yourdatasource/news/invalid_id"
+```
+
+3. **服务状态**:
+```bash
+# 检查服务状态
+curl "http://localhost:8001/api/yourdatasource/status"
+
+# 手动爬取
+curl -X POST "http://localhost:8001/api/yourdatasource/crawl"
+```
+
+---
+
+## 附录
+
+### A. 完整字段参考表
+
+#### NewsArticle 所有字段
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| id | string | 否 | 唯一标识 |
+| title | string | 是 | 标题 |
+| date | string | 是 | 发布日期 YYYY-MM-DD |
+| url | string | 是 | 原文链接 |
+| content | List[NewsContentBlock] | 是 | 内容块数组 |
+| category | string | 否 | 分类 |
+| summary | string | 否 | 摘要 |
+| source | string | 否 | 数据源标识 |
+| created_at | datetime | 否 | 创建时间 |
+| updated_at | datetime | 否 | 更新时间 |
+
+#### BannerResponse 所有字段
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| success | bool | 是 | 是否成功 |
+| images | List[str] | 是 | 图片URL数组 |
+| total | int | 是 | 图片总数 |
+| message | string | 是 | 响应消息 |
+| timestamp | string | 是 | 响应时间 ISO格式 |
+
+### B. 数据源对照表
+
+| 数据源名称 | source 标识 | category 值 | 接口路径 |
+|-----------|------------|------------|---------|
+| OpenHarmony 官网 | OpenHarmony | 官方动态 | /api/news/openharmony |
+| OpenHarmony 技术博客 | OpenHarmony技术博客 | 技术博客 | /api/news/blog |
+| 官网手机版 Banner | - | - | /api/banner/mobile |
+
+### C. 快速参考 - API Cheat Sheet
+
+```bash
+# 新闻 API
+GET  /api/news/                    # 获取所有新闻（分页）
+GET  /api/news/?all=true           # 获取所有新闻（不分页）
+GET  /api/news/openharmony         # 获取官网新闻
+GET  /api/news/blog                # 获取技术博客
+GET  /api/news/{id}                # 获取新闻详情
+POST /api/news/crawl               # 手动爬取新闻
+GET  /api/news/status/info         # 获取服务状态
+POST /api/news/cache/refresh       # 刷新缓存
+
+# 轮播图 API
+GET    /api/banner/mobile          # 获取轮播图（缓存）
+GET    /api/banner/mobile/enhanced # 增强版爬虫获取
+GET    /api/banner/status          # 获取服务状态
+POST   /api/banner/crawl           # 手动爬取
+DELETE /api/banner/cache/clear     # 清空缓存
+GET    /api/banner/cache           # 查看缓存详情
+```
+
+---
+
+**文档版本**: v1.0
+**最后更新**: 2025-01-16
+**维护者**: XBXyftx
+
+如有疑问，请参考:
+- `COLLABORATION_GUIDE.md` - 团队协作指南
+- `templates/README.md` - 开发教程
+- `README.md` - 项目总体文档
