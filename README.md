@@ -1,4 +1,4 @@
-# NowInOpenHarmony 后端服务1
+# NowInOpenHarmony 后端服务
 
 ## 项目概述
 
