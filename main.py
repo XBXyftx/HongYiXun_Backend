@@ -25,7 +25,7 @@ from core.scheduler import start_scheduler, stop_scheduler, get_scheduler
 from core.cache import init_cache, get_news_cache
 
 # 导入API路由
-from api import news, banner
+from api import news, banner, cto51
 
 # 设置日志
 setup_logging()
@@ -73,9 +73,13 @@ async def global_exception_handler(request: Request, exc: Exception):
         content={"detail": "服务器内部错误"}
     )
 
-# 注册路由
+# ============= 核心路由 (不要修改) =============
 app.include_router(news.router)
 app.include_router(banner.router)
+
+# ============= 新增路由区域 =============
+# 51CTO开源社区路由
+app.include_router(cto51.router)
 
 # 根路径
 @app.get("/")
@@ -156,7 +160,10 @@ async def api_health_check():
                 "banner_images": "/api/banner/",
                 "download_banners": "/api/banner/download",
                 "banner_urls": "/api/banner/urls",
-                "banner_status": "/api/banner/status"
+                "banner_status": "/api/banner/status",
+                "cto51_articles": "/api/cto51/",
+                "cto51_crawl": "/api/cto51/crawl",
+                "cto51_status": "/api/cto51/status/info"
             }
         }
     except Exception as e:
