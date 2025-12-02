@@ -2,7 +2,7 @@
 
 ## 项目概述
 
-NowInOpenHarmony 是一个聚合 OpenHarmony 相关资讯的应用后端服务。该系统从 OpenHarmony 官方网站、技术博客等多源采集新闻数据,进行结构化处理,并对外提供 RESTful 风格的数据接口供 OpenHarmony 客户端调用。采用多线程爬虫架构,支持非阻塞数据更新和智能缓存管理。
+NowInOpenHarmony 是一个聚合 OpenHarmony 相关资讯的应用后端服务。该系统从 OpenHarmony 官方网站、技术博客、华为开发者网站等多源采集新闻和轮播图数据,进行结构化处理,并对外提供 RESTful 风格的数据接口供 OpenHarmony 客户端调用。采用多线程爬虫架构,支持非阻塞数据更新和智能缓存管理。
 
 ## 技术栈
 
@@ -20,7 +20,8 @@ NowInOpenHarmony 是一个聚合 OpenHarmony 相关资讯的应用后端服务�
 - 从 OpenHarmony 官方网站采集新闻和动态
 - 从 OpenHarmony 技术博客采集技术文章
 - 支持移动端 Banner 图片采集（传统版 + 增强版）
-- 多源数据聚合（官方新闻 + 技术博客 + 轮播图）
+- 🆕 **华为轮播图采集**: 从华为开发者网站自动采集轮播图数据
+- 多源数据聚合（官方新闻 + 技术博客 + 轮播图 + 华为轮播图）
 - 智能数据去重和清洗
 - 多线程并发爬虫,支持失败重试机制
 
@@ -38,9 +39,12 @@ NowInOpenHarmony 是一个聚合 OpenHarmony 相关资讯的应用后端服务�
 - 手动触发爬取接口
 - 服务状态监控接口
 - 缓存刷新接口
+- 🆕 **华为轮播图API**: 完整的轮播图数据管理和监控接口
 
 ### 定时任务模块
-- 每30分钟自动更新缓存
+- 每6小时自动更新新闻缓存
+- 每6小时自动更新轮播图缓存（与新闻错峰）
+- 每6小时自动更新华为轮播图缓存（进一步错峰）
 - 每天凌晨2点执行完整爬取
 - 支持失败重试机制
 
@@ -122,6 +126,7 @@ docker-compose -f docker-compose.prod.yml up -d        # 生产环境
 - API文档 (Swagger): http://localhost:8001/docs
 - API文档 (ReDoc): http://localhost:8001/redoc
 - 健康检查: http://localhost:8001/health
+- 华为轮播图API: http://localhost:8001/api/carousel/slides
 
 ## API接口
 
@@ -147,6 +152,19 @@ docker-compose -f docker-compose.prod.yml up -d        # 生产环境
 | GET | `/api/banner/status` | 获取轮播图服务状态 |
 | DELETE | `/api/banner/cache/clear` | 清空轮播图缓存 |
 | GET | `/api/banner/cache` | 获取轮播图缓存详细信息 |
+
+### 华为轮播图接口 🆕
+
+| 方法 | 端点 | 描述 |
+|------|------|------|
+| GET | `/api/carousel/slides` | 获取华为轮播图数据（支持分页和过滤） |
+| GET | `/api/carousel/slides/{slide_id}` | 获取单个华为轮播图详情 |
+| GET | `/api/carousel/cache/status` | 获取华为轮播图缓存状态 |
+| GET | `/api/carousel/stats` | 获取华为轮播图数据统计信息 |
+| POST | `/api/carousel/crawl/manual` | 手动触发华为轮播图爬取 |
+| GET | `/api/carousel/crawler/info` | 获取华为轮播图爬虫配置信息 |
+| GET | `/api/carousel/crawler/test` | 测试华为轮播图爬虫连接 |
+| POST | `/api/carousel/cache/export` | 导出华为轮播图缓存数据 |
 
 ### 基础接口
 

@@ -403,11 +403,13 @@ def get_news_cache() -> NewsCache:
 
 def init_cache():
     """初始化缓存"""
-    global _news_cache, _banner_cache
+    global _news_cache, _banner_cache, _carousel_cache
     _news_cache = NewsCache()
     _banner_cache = BannerCache()
+    _carousel_cache = CarouselCache()
     logger.info("新闻缓存初始化完成")
     logger.info("轮播图缓存初始化完成")
+    logger.info("华为轮播图缓存初始化完成")
 
 
 class BannerCache:
@@ -518,12 +520,228 @@ class BannerCache:
             logger.info("轮播图缓存已清空")
 
 
-# 全局轮播图缓存实例
+class CarouselCache:
+    """华为轮播图数据缓存管理器"""
+
+    def __init__(self):
+        self._cache: List[Dict[str, Any]] = []
+        self._cache_lock = threading.RLock()  # 可重入锁
+        self._status = ServiceStatus.READY
+        self._last_update = None
+        self._update_count = 0
+        self._error_message = None
+        self._is_updating = False
+        self._is_first_load = True
+        self._created_at = datetime.now()
+
+    def get_status(self) -> Dict[str, Any]:
+        """获取服务状态"""
+        with self._cache_lock:
+            return {
+                "status": self._status.value,
+                "last_update": self._last_update,
+                "cache_count": len(self._cache),
+                "update_count": self._update_count,
+                "error_message": self._error_message,
+                "is_updating": self._is_updating,
+                "is_first_load": self._is_first_load,
+                "created_at": self._created_at.isoformat() if self._created_at else None,
+                "uptime_seconds": (datetime.now() - self._created_at).total_seconds()
+            }
+
+    def set_status(self, status: ServiceStatus, error_message: Optional[str] = None):
+        """设置服务状态"""
+        with self._cache_lock:
+            self._status = status
+            self._error_message = error_message
+            logger.info(f"轮播图服务状态更新: {status.value}")
+
+    def set_updating(self, is_updating: bool):
+        """设置更新状态"""
+        with self._cache_lock:
+            self._is_updating = is_updating
+            if is_updating:
+                logger.info("轮播图数据更新开始，状态设为准备中")
+                self.set_status(ServiceStatus.PREPARING)
+            else:
+                logger.info("轮播图数据更新完成，状态设为就绪")
+                self.set_status(ServiceStatus.READY)
+
+    def get_data(self) -> List[Dict[str, Any]]:
+        """获取轮播图数据"""
+        with self._cache_lock:
+            if self._status == ServiceStatus.ERROR:
+                raise Exception(f"轮播图服务错误: {self._error_message}")
+            return self._cache.copy()
+
+    def update_cache(self, carousel_data: List[Dict[str, Any]], source: str = "unknown"):
+        """更新轮播图缓存数据"""
+        with self._cache_lock:
+            try:
+                self.set_updating(True)
+
+                # 处理新数据
+                processed_data = []
+                for item in carousel_data:
+                    processed_data.append(item)
+
+                # 更新缓存
+                self._cache = processed_data
+                self._last_update = datetime.now().isoformat()
+                self._update_count += 1
+                self._is_first_load = False
+
+                logger.info(f"🎯 轮播图缓存更新成功，共 {len(processed_data)} 个轮播图项，来源: {source}")
+
+                # 设置完成状态 - 只有在有数据时才设为READY
+                if len(processed_data) > 0:
+                    self.set_updating(False)
+                    logger.info(f"✅ 轮播图缓存更新成功，共 {len(processed_data)} 项，状态：READY")
+                else:
+                    # 如果没有数据，保持PREPARING状态
+                    self._is_updating = False
+                    self._status = ServiceStatus.PREPARING
+                    logger.warning("⚠️ 轮播图缓存更新完成，但未获取到数据，状态保持：PREPARING")
+
+            except Exception as e:
+                error_msg = f"轮播图缓存更新失败: {str(e)}"
+                self.set_status(ServiceStatus.ERROR, error_msg)
+                self._is_updating = False
+                logger.error(error_msg)
+                raise
+
+    def get_cache_info(self) -> Dict[str, Any]:
+        """获取轮播图缓存详细信息"""
+        with self._cache_lock:
+            # 基本统计
+            total_items = len(self._cache)
+            items_with_images = sum(1 for item in self._cache if item.get("image_url"))
+            items_with_text = sum(1 for item in self._cache if (
+                item.get("title") or
+                item.get("subtitle") or
+                item.get("description") or
+                item.get("all_text")
+            ))
+            items_with_both = sum(1 for item in self._cache if (
+                item.get("image_url") and (
+                    item.get("title") or
+                    item.get("subtitle") or
+                    item.get("description") or
+                    item.get("all_text")
+                )
+            ))
+
+            # 数据质量分数
+            valid_items = items_with_both
+            data_quality_score = ((items_with_images + items_with_text) / (2 * total_items)) * 100 if total_items > 0 else 0
+
+            return {
+                "basic_info": {
+                    "total_items": total_items,
+                    "items_with_images": items_with_images,
+                    "items_with_text": items_with_text,
+                    "valid_items": valid_items,
+                    "data_quality_score": round(data_quality_score, 2)
+                },
+                "timestamps": {
+                    "created_at": self._created_at.isoformat() if self._created_at else None,
+                    "last_update": self._last_update,
+                    "age_seconds": (datetime.now() - self._created_at).total_seconds() if self._created_at else 0
+                },
+                "statistics": {
+                    "update_count": self._update_count,
+                    "status": self._status.value,
+                    "is_first_load": self._is_first_load,
+                    "error_message": self._error_message
+                }
+            }
+
+    def export_data(self, file_path: str) -> bool:
+        """导出缓存数据到文件"""
+        try:
+            with self._cache_lock:
+                export_data = {
+                    "export_time": datetime.now().isoformat(),
+                    "cache_info": self.get_cache_info(),
+                    "slides": self._cache
+                }
+
+                with open(file_path, 'w', encoding='utf-8') as f:
+                    json.dump(export_data, f, ensure_ascii=False, indent=2)
+
+                logger.info(f"轮播图缓存数据已导出到: {file_path}")
+                return True
+
+        except Exception as e:
+            logger.error(f"导出轮播图缓存数据失败: {e}")
+            return False
+
+    def clear_cache(self):
+        """清空轮播图缓存"""
+        with self._cache_lock:
+            self._cache.clear()
+            self._last_update = None
+            self._update_count = 0
+            self.set_updating(True)
+            logger.info("轮播图缓存已清空")
+
+
+class CacheManager:
+    """统一缓存管理器"""
+
+    def __init__(self):
+        self._news_cache = None
+        self._banner_cache = None
+        self._carousel_cache = None
+
+    def get_cache(self, cache_type: str):
+        """获取指定类型的缓存"""
+        if cache_type == "news":
+            if self._news_cache is None:
+                self._news_cache = NewsCache()
+            return self._news_cache
+        elif cache_type == "banner":
+            if self._banner_cache is None:
+                self._banner_cache = BannerCache()
+            return self._banner_cache
+        elif cache_type == "carousel":
+            if self._carousel_cache is None:
+                self._carousel_cache = CarouselCache()
+            return self._carousel_cache
+        else:
+            raise ValueError(f"未知的缓存类型: {cache_type}")
+
+
+# 全局缓存实例
+_news_cache: Optional[NewsCache] = None
 _banner_cache: Optional[BannerCache] = None
+_carousel_cache: Optional[CarouselCache] = None
+_cache_manager: Optional[CacheManager] = None
+
+def get_news_cache() -> NewsCache:
+    """获取新闻缓存实例"""
+    global _news_cache
+    if _news_cache is None:
+        _news_cache = NewsCache()
+    return _news_cache
 
 def get_banner_cache() -> BannerCache:
     """获取轮播图缓存实例"""
     global _banner_cache
     if _banner_cache is None:
         _banner_cache = BannerCache()
-    return _banner_cache 
+    return _banner_cache
+
+def get_carousel_cache() -> CarouselCache:
+    """获取华为轮播图缓存实例"""
+    global _carousel_cache
+    if _carousel_cache is None:
+        _carousel_cache = CarouselCache()
+    return _carousel_cache
+
+def get_cache_manager() -> CacheManager:
+    """获取统一缓存管理器实例"""
+    global _cache_manager
+    if _cache_manager is None:
+        _cache_manager = CacheManager()
+    return _cache_manager 
