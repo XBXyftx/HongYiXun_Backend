@@ -21,7 +21,7 @@ import threading
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
 
-from .cache import get_news_cache, get_banner_cache, ServiceStatus
+from .cache import get_news_cache, get_banner_cache, get_carousel_cache, ServiceStatus
 from services.news_service import get_news_service, NewsSource
 
 logger = logging.getLogger(__name__)
@@ -54,7 +54,17 @@ class TaskScheduler:
                 name='更新轮播图缓存',
                 replace_existing=True
             )
-            
+
+            # 每6小时更新一次华为轮播图（与轮播图错峰：延迟20分钟启动）
+            carousel_start = datetime.now() + timedelta(minutes=20)
+            self.scheduler.add_job(
+                self._update_carousel_cache_job,
+                trigger=IntervalTrigger(hours=6, start_date=carousel_start),
+                id='update_carousel_cache',
+                name='更新华为轮播图缓存',
+                replace_existing=True
+            )
+
             # 每天凌晨2点执行完整爬取（作为备份）
             self.scheduler.add_job(
                 self._full_crawl_job,
@@ -217,10 +227,14 @@ class TaskScheduler:
             
             # 同时启动轮播图初始加载
             banner_future = self.thread_pool.submit(self._run_banner_crawler_in_thread, "初始轮播图加载")
-            
+
+            # 启动华为轮播图初始加载
+            carousel_future = self.thread_pool.submit(self._run_carousel_crawler_in_thread, "初始华为轮播图加载")
+
             # 不等待完成，让任务在后台执行，服务可以立即启动
             logger.info("初始缓存加载任务已提交到后台线程，服务可以立即响应请求")
             logger.info("初始轮播图加载任务已提交到后台线程")
+            logger.info("初始华为轮播图加载任务已提交到后台线程")
             
         except Exception as e:
             logger.error(f"提交初始缓存加载任务失败: {e}")
@@ -228,23 +242,34 @@ class TaskScheduler:
             cache = get_news_cache()
             cache.set_status(ServiceStatus.ERROR, str(e))
     
-    async def manual_crawl(self, source: NewsSource = NewsSource.ALL):
+    async def manual_crawl(self, source=None, cache_type="news"):
         """手动触发爬取任务"""
         try:
-            logger.info(f"开始执行手动爬取任务 - 来源: {source.value}")
-            
-            # 在线程池中执行爬虫任务
-            task_name = f"手动爬取任务 - {source.value}"
-            future = self.thread_pool.submit(self._run_crawler_in_thread, task_name, source)
-            
-            # 不等待完成，让任务在后台执行
-            logger.info(f"{task_name}已提交到后台线程")
-            
+            if cache_type == "carousel":
+                logger.info("开始执行手动华为轮播图爬取任务")
+
+                # 在线程池中执行轮播图爬虫任务
+                task_name = "手动华为轮播图爬取任务"
+                future = self.thread_pool.submit(self._run_carousel_crawler_in_thread, task_name)
+
+                logger.info(f"{task_name}已提交到后台线程")
+                return {"message": "手动华为轮播图爬取任务已提交", "status": "submitted"}
+            else:
+                # 默认新闻爬取
+                if source is None:
+                    source = NewsSource.ALL
+                logger.info(f"开始执行手动爬取任务 - 来源: {source.value}")
+
+                # 在线程池中执行爬虫任务
+                task_name = f"手动爬取任务 - {source.value}"
+                future = self.thread_pool.submit(self._run_crawler_in_thread, task_name, source)
+
+                logger.info(f"{task_name}已提交到后台线程")
+                return {"message": f"手动爬取任务已提交 - {source.value}", "status": "submitted"}
+
         except Exception as e:
             logger.error(f"提交手动爬取任务失败: {e}")
-            # 设置错误状态
-            cache = get_news_cache()
-            cache.set_status(ServiceStatus.ERROR, str(e))
+            return {"message": f"手动爬取任务提交失败 - {str(e)}", "status": "error"}
     
     async def manual_banner_crawl(self):
         """手动触发轮播图爬取任务"""
@@ -263,6 +288,64 @@ class TaskScheduler:
             # 设置错误状态
             banner_cache = get_banner_cache()
             banner_cache.set_status(ServiceStatus.ERROR, str(e))
+
+    def _run_carousel_crawler_in_thread(self, task_name: str):
+        """在线程中执行华为轮播图爬虫任务"""
+        try:
+            logger.info(f"🚀 开始执行{task_name}")
+
+            # 获取缓存实例
+            carousel_cache = get_carousel_cache()
+
+            # 导入轮播图服务
+            from services.carousel_service import get_carousel_service
+            carousel_service = get_carousel_service()
+
+            logger.info(f"📊 {task_name} - 开始爬取华为轮播图数据...")
+
+            # 执行爬取
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+
+            try:
+                carousel_data = loop.run_until_complete(carousel_service.crawl_with_retry())
+
+                logger.info(f"🔍 {task_name} - 爬取完成，原始数据数: {len(carousel_data)}")
+
+                # 验证轮播图数据
+                valid_data = carousel_service.validate_carousel_data(carousel_data)
+
+                logger.info(f"✅ {task_name} - 验证完成，有效数据数: {len(valid_data)}")
+
+                # 更新缓存
+                if len(valid_data) > 0:
+                    carousel_cache.update_cache(valid_data, "华为开发者网站")
+                    logger.info(f"🎯 {task_name} - 缓存更新完成")
+                else:
+                    logger.warning(f"⚠️ {task_name} - 未获取到有效轮播图数据")
+                    carousel_cache.set_updating(False)
+
+            finally:
+                loop.close()
+
+        except Exception as e:
+            logger.error(f"❌ {task_name}执行失败: {e}")
+            # 设置错误状态
+            carousel_cache = get_carousel_cache()
+            carousel_cache.set_status(ServiceStatus.ERROR, str(e))
+            carousel_cache.set_updating(False)
+
+    async def _update_carousel_cache_job(self):
+        """定时更新华为轮播图缓存任务"""
+        try:
+            # 在线程池中执行轮播图爬虫任务
+            task_name = "定时华为轮播图更新任务"
+            future = self.thread_pool.submit(self._run_carousel_crawler_in_thread, task_name)
+            # 不等待完成，让任务在后台执行
+            logger.info(f"{task_name}已提交到后台线程")
+
+        except Exception as e:
+            logger.error(f"提交定时华为轮播图更新任务失败: {e}")
     
     def start(self):
         """启动调度器"""

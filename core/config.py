@@ -53,6 +53,17 @@ class Settings(BaseSettings):
     openharmony_base_url: str = "https://www.openharmony.cn"
     csdn_search_url: str = "https://so.csdn.net/so/search"
     zhihu_search_url: str = "https://www.zhihu.com/search"
+
+    # 华为轮播图配置
+    huawei_target_url: str = "https://developer.huawei.com"
+    huawei_base_domain: str = "https://developer.huawei.com"
+    mobile_user_agent: str = "Mozilla/5.0 (iPhone; CPU iPhone OS 14_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.0 Mobile/15E148 Safari/604.1"
+    mobile_viewport_width: int = 375
+    mobile_viewport_height: int = 667
+    mobile_device_scale_factor: int = 2
+    browser_headless: bool = True
+    browser_timeout: int = 30
+    crawler_retry_count: int = 3
     
     class Config:
         env_file = ".env"
