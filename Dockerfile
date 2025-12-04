@@ -25,7 +25,14 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PORT=8001 \
     BANNER_USE_ENHANCED=true \
     CHROME_BIN=/usr/bin/chromium \
-    CHROMEDRIVER_PATH=/usr/bin/chromedriver
+    CHROMEDRIVER_PATH=/usr/bin/chromedriver \
+    ENABLE_SCHEDULER=true \
+    LOG_LEVEL=INFO \
+    # 华为轮播图配置
+    HUAWEI_TARGET_URL=https://developer.huawei.com \
+    HUAWEI_BASE_DOMAIN=https://developer.huawei.com \
+    BROWSER_HEADLESS=true \
+    BROWSER_TIMEOUT=30
 
 # 创建非特权用户
 RUN groupadd -r appuser && useradd -r -g appuser appuser
@@ -36,6 +43,13 @@ RUN apt-get update \
         gcc \
         g++ \
         curl \
+        wget \
+        gnupg \
+        unzip \
+        # 基础库
+        libffi-dev \
+        libssl-dev \
+        # Chromium和依赖
         chromium \
         chromium-driver \
         # Chromium运行时依赖
@@ -66,12 +80,21 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip \
     && pip install --no-cache-dir -r requirements.txt
 
+# 安装额外的爬虫依赖
+RUN pip install --no-cache-dir \
+    playwright==1.40.0 \
+    lxml==4.9.3 \
+    pillow==10.1.0
+
 # 创建必要的目录
-RUN mkdir -p logs data \
+RUN mkdir -p logs data temp \
     && chown -R appuser:appuser /app
 
 # 复制应用代码
 COPY --chown=appuser:appuser . .
+
+# 设置权限
+RUN chmod +x run.py
 
 # 暴露端口
 EXPOSE 8001
